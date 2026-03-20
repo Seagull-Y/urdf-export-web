@@ -5,9 +5,10 @@ A web application that exports Onshape CAD assemblies to URDF format and preview
 ## Features
 
 - Export Onshape assemblies to URDF via API
-- Interactive 3D preview with joint controls
-- Per-link mass display panel
-- Wireframe toggle and camera fit
+- Interactive 3D preview with joint controls and per-link mass panel
+- Usage statistics (daily / weekly / monthly exports)
+- Auto-cleanup of export files older than 3 days
+- Cloudflare Tunnel support for public HTTPS access
 - Docker-ready deployment
 
 ---
@@ -47,7 +48,7 @@ git clone https://github.com/Seagull-Y/urdf-export-web.git
 cd urdf-export-web
 ```
 
-### 3. Configure API keys
+### 3. Configure environment
 
 ```bash
 cp .env.example .env
@@ -72,15 +73,71 @@ The app is available at `http://<server-ip>:8000`.
 
 **Common commands:**
 ```bash
-docker compose logs -f        # live logs
-docker compose down           # stop
-docker compose up -d          # start (after first build)
+docker compose logs -f          # live logs
+docker compose ps               # check container status
+docker compose down             # stop all containers
+docker compose up -d            # start (after first build)
 ```
 
 ### 5. Open firewall port (if needed)
 
 ```bash
 sudo ufw allow 8000/tcp
+```
+
+---
+
+## Public Access via Cloudflare Tunnel
+
+`docker compose up` automatically starts a Cloudflare quick tunnel alongside the app.
+
+### Option A — Quick tunnel (no account needed, URL changes on restart)
+
+No configuration required. Check the public URL with:
+```bash
+docker logs urdf-cloudflared 2>&1 | grep -i trycloudflare
+```
+
+### Option B — Named tunnel with fixed domain
+
+1. Sign up at [Cloudflare Zero Trust](https://one.dash.cloudflare.com) (free)
+2. Go to **Networks → Tunnels → Create a tunnel → Cloudflared**
+3. Name it (e.g. `urdf-web`) and copy the token
+4. Add your domain in **Public Hostname**:
+   - **Subdomain**: leave empty or use e.g. `urdf`
+   - **Domain**: your domain (must be on Cloudflare DNS)
+   - **Service**: `HTTP` → `urdf-exporter:8000`
+5. Add the token to `.env` on the server:
+   ```
+   TUNNEL_TOKEN=eyJhIjoixxxxxxx
+   ```
+6. Restart:
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+The tunnel automatically uses the named tunnel when `TUNNEL_TOKEN` is set, otherwise falls back to quick tunnel.
+
+---
+
+## Updating to a New Version
+
+```bash
+cd ~/urdf-export-web
+git pull
+docker compose up --build -d
+```
+
+If `Dockerfile` or `requirements_web.txt` changed, force a clean rebuild:
+```bash
+docker compose build --no-cache && docker compose up -d
+```
+
+To roll back:
+```bash
+git log --oneline          # find target commit
+git checkout <commit-id>
+docker compose up --build -d
 ```
 
 ---
@@ -92,7 +149,7 @@ sudo ufw allow 8000/tcp
 ```bash
 sudo apt update && sudo apt install -y \
     python3 python3-pip python3-venv git \
-    libgl1-mesa-glx libglib2.0-0 libgomp1
+    libgl1 libglib2.0-0 libgomp1
 ```
 
 ### 2. Clone the repository
@@ -117,19 +174,13 @@ cp .env.example .env
 nano .env
 ```
 
-Fill in your Onshape credentials:
-```
-ONSHAPE_ACCESS_KEY=your_access_key_here
-ONSHAPE_SECRET_KEY=your_secret_key_here
-```
-
 ### 5. Run
 
 ```bash
 python3 app.py
 ```
 
-Open your browser at `http://localhost:8000` (or `http://<server-ip>:8000` from another machine).
+Open your browser at `http://localhost:8000`.
 
 ---
 
@@ -144,7 +195,8 @@ Open your browser at `http://localhost:8000` (or `http://<server-ip>:8000` from 
 ├── requirements_web.txt    # Web + export dependencies
 ├── Dockerfile
 ├── docker-compose.yml
-└── .env.example            # Environment variable template
+├── .env.example            # Environment variable template
+└── jobs/                   # Export output (auto-cleaned after 3 days)
 ```
 
 ---
@@ -155,6 +207,7 @@ Open your browser at `http://localhost:8000` (or `http://<server-ip>:8000` from 
 |---|---|---|
 | `ONSHAPE_ACCESS_KEY` | Yes* | Onshape API access key |
 | `ONSHAPE_SECRET_KEY` | Yes* | Onshape API secret key |
+| `TUNNEL_TOKEN` | No | Cloudflare Tunnel token for fixed domain access |
 | `PORT` | No | Server port (default: `8000`) |
 
 \* Keys can also be entered per-export in the UI (and optionally saved in the browser).
