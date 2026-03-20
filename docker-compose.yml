@@ -18,17 +18,24 @@ services:
       retries: 3
       start_period: 10s
 
-  # ── Cloudflare Quick Tunnel ─────────────────────────────────────
-  # Provides a public https://*.trycloudflare.com URL automatically.
-  # To use a named tunnel with a fixed domain instead:
-  #   set TUNNEL_TOKEN=<your token from Zero Trust dashboard> in .env
+  # ── Cloudflare Tunnel ───────────────────────────────────────────
+  # - If TUNNEL_TOKEN is set in .env → named tunnel (fixed domain)
+  # - Otherwise → quick tunnel (random trycloudflare.com URL)
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: urdf-cloudflared
     restart: unless-stopped
     depends_on:
       - urdf-exporter
-    command: >
-      tunnel --no-autoupdate --url http://urdf-exporter:8000
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
+    entrypoint: >
+      sh -c '
+        if [ -n "$$TUNNEL_TOKEN" ]; then
+          cloudflared tunnel --no-autoupdate run --token "$$TUNNEL_TOKEN";
+        else
+          cloudflared tunnel --no-autoupdate --url http://urdf-exporter:8000;
+        fi
+      '
     networks:
       - default
