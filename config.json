@@ -1,0 +1,8 @@
+{
+   "documentId": "7d0d24259dc99910b3744602",
+   "assemblyName": "URDF_Top_Assembly",
+   "outputFormat": "urdf",
+   "mergeSTLs": "all",
+   "simplifySTLs": "all",
+   "additionalUrdfFile": "/mujoco.xml"
+}

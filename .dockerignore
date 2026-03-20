@@ -1,0 +1,16 @@
+# Secrets
+.env
+credentials.json
+
+# Job outputs (mounted as volume at runtime)
+jobs/
+
+# Dev/local stuff
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.git/
+.gitignore
+.claude/
