@@ -264,3 +264,13 @@ async def list_jobs():
 static_dir = SCRIPT_DIR / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
+
+# ---------------------------------------------------------------------------
+# Entry point — python app.py
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting server at http://localhost:{port}")
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
