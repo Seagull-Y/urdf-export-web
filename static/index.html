@@ -530,6 +530,22 @@
       border-top: none;
     }
 
+    /* ── Usage stats ── */
+    .stat-cell {
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+      padding: 6px 4px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-label {
+      font-size: 0.62rem;
+      color: var(--muted);
+      margin-top: 1px;
+      font-weight: 400;
+    }
+
     /* ── History list ── */
     .history-item {
       display: flex;
@@ -665,11 +681,18 @@
         ⬇ Download ZIP
       </button>
 
-      <!-- Recent jobs -->
-      <details id="history-section" style="display:none">
-        <summary>Recent Exports</summary>
-        <div id="history-list" style="margin-top:6px"></div>
-      </details>
+      <!-- Usage stats -->
+      <div id="stats-section" style="margin-top:10px">
+        <div style="font-size:0.7rem;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">Usage</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center">
+          <div class="stat-cell"><div id="stat-daily">—</div><div class="stat-label">Today</div></div>
+          <div class="stat-cell"><div id="stat-weekly">—</div><div class="stat-label">This Week</div></div>
+          <div class="stat-cell"><div id="stat-monthly">—</div><div class="stat-label">This Month</div></div>
+        </div>
+        <div id="stats-cleanup-note" style="display:none;margin-top:6px;font-size:0.68rem;color:var(--muted);line-height:1.4">
+          ⏱ Local files auto-deleted after <strong id="stats-ttl">3</strong> days
+        </div>
+      </div>
 
     </div><!-- /sidebar-scroll -->
   </div><!-- /sidebar -->
@@ -1188,7 +1211,7 @@ async function startExport() {
     const { job_id } = await res.json();
     currentJobId = job_id;
     streamLogs(job_id);
-    refreshHistory();
+    refreshStats();
   } catch (err) {
     log(`✗ ${err.message}`, 'err');
     showStatus('error', 'Failed to Start Export', err.message);
@@ -1249,7 +1272,7 @@ function streamLogs(jobId) {
         }
         document.getElementById('log-details').open = true;
       }
-      refreshHistory();
+      refreshStats();
     }
   };
 
@@ -1296,55 +1319,17 @@ function downloadZip() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Recent jobs history
+// Usage stats
 // ──────────────────────────────────────────────────────────────
-async function refreshHistory() {
+async function refreshStats() {
   try {
-    const jobs = await (await fetch('/api/jobs')).json();
-    if (!jobs.length) return;
-
-    document.getElementById('history-section').style.display = 'block';
-    const list = document.getElementById('history-list');
-    list.innerHTML = '';
-
-    for (const job of jobs.slice(0, 8)) {
-      const item = document.createElement('div');
-      item.className = 'history-item';
-
-      const dot = document.createElement('span');
-      dot.className = `dot dot-${job.status === 'running' ? 'running' : job.status === 'success' ? 'success' : 'failed'}`;
-
-      const id = document.createElement('span');
-      id.className = 'history-id';
-      id.textContent = job.job_id.slice(0, 8);
-
-      const time = document.createElement('span');
-      time.style.cssText = 'color:var(--muted);font-size:0.68rem;margin-left:auto';
-      time.textContent = new Date(job.created_at + 'Z').toLocaleTimeString();
-
-      item.appendChild(dot);
-      item.appendChild(id);
-      item.appendChild(time);
-
-      if (job.urdf_available) {
-        item.title = 'Click to load this export';
-        item.onclick = () => {
-          currentJobId = job.job_id;
-          document.getElementById('btn-dl').style.display = 'block';
-          document.getElementById('progress-wrap').style.display = 'none';
-          setStatusBadge('success', 'Success');
-          showStatus('running', 'Loading 3D model…', 'From previous export');
-          loadRobot(job.job_id).then(() => {
-            const dof = document.getElementById('joints-dof').textContent;
-            showStatus('success', 'URDF Ready', dof ? `${dof} — drag sliders to validate` : 'Model loaded');
-          }).catch(err => {
-            showStatus('error', 'Viewer Load Failed', err.message);
-            log(`Load error: ${err.message}`, 'err');
-          });
-        };
-      }
-      list.appendChild(item);
-    }
+    const s = await (await fetch('/api/stats')).json();
+    document.getElementById('stat-daily').textContent   = s.daily;
+    document.getElementById('stat-weekly').textContent  = s.weekly;
+    document.getElementById('stat-monthly').textContent = s.monthly;
+    const note = document.getElementById('stats-cleanup-note');
+    document.getElementById('stats-ttl').textContent = s.ttl_days;
+    note.style.display = 'block';
   } catch (_) {}
 }
 
@@ -1390,7 +1375,7 @@ function maybeSaveKeys() {
 // ──────────────────────────────────────────────────────────────
 Object.assign(window, {
   startExport, downloadZip, fitCamera, resetJoints,
-  toggleWireframe, loadRobot, setJointValue, refreshHistory,
+  toggleWireframe, loadRobot, setJointValue, refreshStats,
   onRememberChange,
 });
 
@@ -1398,7 +1383,7 @@ Object.assign(window, {
 // Boot
 // ──────────────────────────────────────────────────────────────
 initViewer();
-refreshHistory();
+refreshStats();
 loadSavedKeys();
 </script>
 

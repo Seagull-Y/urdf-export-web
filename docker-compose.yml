@@ -3,7 +3,6 @@ services:
     build: .
     image: urdf-exporter:latest
     container_name: urdf-exporter
-    # Expose port locally only; cloudflare tunnel handles public access
     ports:
       - "0.0.0.0:8000:8000"
     volumes:
@@ -13,27 +12,23 @@ services:
       - ONSHAPE_SECRET_KEY=${ONSHAPE_SECRET_KEY:-}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/jobs"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/stats"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
-  # ── Cloudflare Tunnel ───────────────────────────────────────────
-  # Option A (quick share, no account): set TUNNEL_TOKEN=quick
-  # Option B (named tunnel):            set TUNNEL_TOKEN=<your token>
-  #   Get token: Cloudflare dashboard → Zero Trust → Tunnels → Create tunnel
-  cloudflare-tunnel:
+  # ── Cloudflare Quick Tunnel ─────────────────────────────────────
+  # Provides a public https://*.trycloudflare.com URL automatically.
+  # To use a named tunnel with a fixed domain instead:
+  #   set TUNNEL_TOKEN=<your token from Zero Trust dashboard> in .env
+  cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: urdf-cloudflared
     restart: unless-stopped
     depends_on:
       - urdf-exporter
     command: >
-      tunnel --no-autoupdate run
-      --token ${TUNNEL_TOKEN:-}
-    environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
-    # Only active when TUNNEL_TOKEN is set; otherwise use quick tunnel manually
-    profiles:
-      - tunnel
+      tunnel --no-autoupdate --url http://urdf-exporter:8000
+    networks:
+      - default

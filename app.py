@@ -10,8 +10,9 @@ import json
 import asyncio
 import zipfile
 import subprocess
+import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 # Load .env file if present (no-op if not found)
@@ -45,6 +46,43 @@ JOBS_DIR = Path("jobs")
 JOBS_DIR.mkdir(exist_ok=True)
 
 SCRIPT_DIR = Path(__file__).parent
+
+# ---------------------------------------------------------------------------
+# Usage stats — stored as a JSON list of ISO timestamps (successful exports)
+# ---------------------------------------------------------------------------
+STATS_FILE = JOBS_DIR / "stats.json"
+JOB_TTL_DAYS = 3   # delete job dirs older than this
+
+
+def _load_stats() -> list[str]:
+    try:
+        return json.loads(STATS_FILE.read_text())
+    except Exception:
+        return []
+
+
+def _append_stat() -> None:
+    stats = _load_stats()
+    stats.append(datetime.now(timezone.utc).isoformat())
+    STATS_FILE.write_text(json.dumps(stats))
+
+
+def _cleanup_old_jobs() -> int:
+    """Delete job directories older than JOB_TTL_DAYS. Returns count removed."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=JOB_TTL_DAYS)
+    removed = 0
+    for job_dir in JOBS_DIR.iterdir():
+        if not job_dir.is_dir() or job_dir.name == "stats.json":
+            continue
+        try:
+            mtime = datetime.fromtimestamp(job_dir.stat().st_mtime, tz=timezone.utc)
+            if mtime < cutoff:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                JOBS.pop(job_dir.name, None)
+                removed += 1
+        except Exception:
+            pass
+    return removed
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +161,8 @@ def _run_export(job_id: str, req: ExportRequest) -> None:
             log(f"✓ Export successful — robot.urdf + {stl_count} mesh files")
             job["status"] = "success"
             job["urdf_available"] = True
+            _append_stat()
+            _cleanup_old_jobs()
         else:
             log(f"✗ Export failed (exit code {proc.returncode})")
             job["status"] = "failed"
@@ -247,22 +287,33 @@ async def download_zip(job_id: str):
     )
 
 
-@app.get("/api/jobs")
-async def list_jobs():
-    """Return up to 20 most recent jobs."""
-    return sorted(
-        [
-            {
-                "job_id": j["job_id"],
-                "status": j["status"],
-                "created_at": j["created_at"],
-                "urdf_available": j["urdf_available"],
-            }
-            for j in JOBS.values()
-        ],
-        key=lambda x: x["created_at"],
-        reverse=True,
-    )[:20]
+@app.get("/api/stats")
+async def get_stats():
+    """Return daily / weekly / monthly successful export counts + cleanup info."""
+    now = datetime.now(timezone.utc)
+    day_start   = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start  = day_start - timedelta(days=now.weekday())
+    month_start = day_start.replace(day=1)
+
+    stats = _load_stats()
+    daily = weekly = monthly = 0
+    for ts in stats:
+        try:
+            t = datetime.fromisoformat(ts)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+            if t >= day_start:   daily   += 1
+            if t >= week_start:  weekly  += 1
+            if t >= month_start: monthly += 1
+        except Exception:
+            pass
+
+    return {
+        "daily":   daily,
+        "weekly":  weekly,
+        "monthly": monthly,
+        "ttl_days": JOB_TTL_DAYS,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +329,9 @@ app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
+    removed = _cleanup_old_jobs()
+    if removed:
+        print(f"Startup cleanup: removed {removed} job(s) older than {JOB_TTL_DAYS} days", flush=True)
     port = int(os.environ.get("PORT", 8000))
     dev = os.environ.get("DEV", "").lower() in ("1", "true", "yes")
     print(f"Starting server at http://0.0.0.0:{port}  (reload={'on' if dev else 'off'})", flush=True)
