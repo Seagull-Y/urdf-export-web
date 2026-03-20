@@ -279,5 +279,6 @@ app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    print(f"Starting server at http://localhost:{port}")
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
+    dev = os.environ.get("DEV", "").lower() in ("1", "true", "yes")
+    print(f"Starting server at http://0.0.0.0:{port}  (reload={'on' if dev else 'off'})", flush=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=dev)
