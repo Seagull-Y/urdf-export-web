@@ -28,14 +28,7 @@ services:
     depends_on:
       - urdf-exporter
     environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
-    entrypoint: >
-      sh -c '
-        if [ -n "$$TUNNEL_TOKEN" ]; then
-          cloudflared tunnel --no-autoupdate run --token "$$TUNNEL_TOKEN";
-        else
-          cloudflared tunnel --no-autoupdate --url http://urdf-exporter:8000;
-        fi
-      '
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
     networks:
       - default
