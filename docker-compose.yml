@@ -29,6 +29,6 @@ services:
       - urdf-exporter
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate --protocol http2 run --token ${TUNNEL_TOKEN}
     networks:
       - default
