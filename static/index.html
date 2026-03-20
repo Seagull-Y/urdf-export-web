@@ -941,11 +941,9 @@ async function loadRobot(jobId) {
   // 6. URDF = Z-up; Three.js = Y-up
   robot.rotation.x = -Math.PI / 2;
 
-  // 7. Center above grid
+  // 7. Keep robot at URDF origin (XZ = 0,0); only lift above grid if it clips below y=0
   const box = new THREE.Box3().setFromObject(robot);
-  const c = box.getCenter(new THREE.Vector3());
-  robot.position.sub(c);
-  robot.position.y += box.getSize(new THREE.Vector3()).y / 2;
+  if (box.min.y < 0) robot.position.y -= box.min.y;
 
   // 8. Swap old model
   if (robotRoot) scene.remove(robotRoot);
