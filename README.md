@@ -12,41 +12,49 @@ A web application that exports Onshape CAD assemblies to URDF format and preview
 
 ---
 
-## Prerequisites
+## Deployment Options
 
-- Python 3.10+
-- [Onshape API keys](https://cad.onshape.com/user/developer/apiKeys)
-- (Optional) Docker & Docker Compose for containerized deployment
+| Method | Best for |
+|---|---|
+| [Docker (recommended)](#docker-deployment-recommended) | Production servers, clean Ubuntu |
+| [Local Python](#local-python-deployment) | Development / quick test |
 
 ---
 
-## Quick Start (Local)
+## Docker Deployment (Recommended)
 
-### 1. Clone the repository
+### 1. Install Docker on Ubuntu
 
 ```bash
+sudo apt update && sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo usermod -aG docker $USER && newgrp docker
+```
+
+Verify:
+```bash
+docker run hello-world
+```
+
+### 2. Clone the repository
+
+```bash
+sudo apt install -y git
 git clone https://github.com/Seagull-Y/urdf-export-web.git
 cd urdf-export-web
 ```
 
-### 2. Create a virtual environment and install dependencies
-
-```bash
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements_web.txt
-```
-
 ### 3. Configure API keys
-
-Create a `.env` file in the project root (see `.env.example`):
 
 ```bash
 cp .env.example .env
+nano .env
 ```
 
-Edit `.env` and fill in your Onshape API credentials:
-
+Fill in your Onshape credentials:
 ```
 ONSHAPE_ACCESS_KEY=your_access_key_here
 ONSHAPE_SECRET_KEY=your_secret_key_here
@@ -54,38 +62,74 @@ ONSHAPE_SECRET_KEY=your_secret_key_here
 
 > Get your keys at: https://cad.onshape.com/user/developer/apiKeys
 
-### 4. Run the server
+### 4. Build and start
 
 ```bash
-python app.py
+docker compose up --build -d
 ```
 
-Open your browser at `http://localhost:8000`.
+The app is available at `http://<server-ip>:8000`.
+
+**Common commands:**
+```bash
+docker compose logs -f        # live logs
+docker compose down           # stop
+docker compose up -d          # start (after first build)
+```
+
+### 5. Open firewall port (if needed)
+
+```bash
+sudo ufw allow 8000/tcp
+```
 
 ---
 
-## Docker Deployment
+## Local Python Deployment
 
-### 1. Configure environment
+### 1. Install system dependencies
+
+```bash
+sudo apt update && sudo apt install -y \
+    python3 python3-pip python3-venv git \
+    libgl1-mesa-glx libglib2.0-0 libgomp1
+```
+
+### 2. Clone the repository
+
+```bash
+git clone https://github.com/Seagull-Y/urdf-export-web.git
+cd urdf-export-web
+```
+
+### 3. Create virtual environment and install dependencies
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements_web.txt
+```
+
+### 4. Configure API keys
 
 ```bash
 cp .env.example .env
-# Edit .env with your Onshape keys
+nano .env
 ```
 
-### 2. Build and start
+Fill in your Onshape credentials:
+```
+ONSHAPE_ACCESS_KEY=your_access_key_here
+ONSHAPE_SECRET_KEY=your_secret_key_here
+```
+
+### 5. Run
 
 ```bash
-docker compose up --build
+python3 app.py
 ```
 
-The app will be available at `http://localhost:8000`.
-
-### 3. Stop
-
-```bash
-docker compose down
-```
+Open your browser at `http://localhost:8000` (or `http://<server-ip>:8000` from another machine).
 
 ---
 
@@ -97,11 +141,9 @@ docker compose down
 ├── export_urdf.py          # Onshape → URDF export logic
 ├── static/
 │   └── index.html          # Single-page frontend (Three.js viewer)
-├── requirements.txt        # Export script dependencies
-├── requirements_web.txt    # Web server dependencies
+├── requirements_web.txt    # Web + export dependencies
 ├── Dockerfile
 ├── docker-compose.yml
-├── deploy.sh               # Production deploy helper
 └── .env.example            # Environment variable template
 ```
 
@@ -111,9 +153,11 @@ docker compose down
 
 | Variable | Required | Description |
 |---|---|---|
-| `ONSHAPE_ACCESS_KEY` | Yes | Onshape API access key |
-| `ONSHAPE_SECRET_KEY` | Yes | Onshape API secret key |
+| `ONSHAPE_ACCESS_KEY` | Yes* | Onshape API access key |
+| `ONSHAPE_SECRET_KEY` | Yes* | Onshape API secret key |
 | `PORT` | No | Server port (default: `8000`) |
+
+\* Keys can also be entered per-export in the UI (and optionally saved in the browser).
 
 ---
 

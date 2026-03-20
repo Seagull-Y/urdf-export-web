@@ -14,6 +14,13 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
+# Load .env file if present (no-op if not found)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles

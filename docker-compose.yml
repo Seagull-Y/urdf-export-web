@@ -7,7 +7,7 @@ services:
     container_name: urdf-exporter
     # Expose port locally only; cloudflare tunnel handles public access
     ports:
-      - "127.0.0.1:8000:8000"
+      - "0.0.0.0:8000:8000"
     volumes:
       - ./jobs:/app/jobs
     environment:
