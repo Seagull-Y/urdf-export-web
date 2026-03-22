@@ -577,14 +577,157 @@
       .joints-panel { width: 175px; }
       .joint-row { grid-template-columns: 60px 1fr 46px; }
     }
+    /* ── Help modal ── */
+    .help-btn {
+      margin-left: 12px;
+      background: none;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 50%;
+      width: 26px; height: 26px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 24px;
+      text-align: center;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .help-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.5); }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px 30px 24px;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    }
+    .modal h2 { margin: 0 0 4px; font-size: 1.15rem; color: #fff; }
+    .modal .modal-sub { color: var(--muted); font-size: 0.78rem; margin-bottom: 20px; }
+    .modal-close {
+      position: absolute; top: 14px; right: 16px;
+      background: none; border: none; color: var(--muted);
+      font-size: 1.2rem; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: #fff; }
+
+    .guide-step {
+      display: flex; gap: 14px;
+      margin-bottom: 18px;
+      align-items: flex-start;
+    }
+    .guide-num {
+      flex-shrink: 0;
+      width: 26px; height: 26px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700; color: #fff;
+      margin-top: 1px;
+    }
+    .guide-content { flex: 1; }
+    .guide-content strong { color: #fff; display: block; margin-bottom: 3px; font-size: 0.88rem; }
+    .guide-content p { color: var(--muted); font-size: 0.78rem; margin: 0; line-height: 1.55; }
+    .guide-content a { color: var(--accent); text-decoration: none; }
+    .guide-content a:hover { text-decoration: underline; }
+    .guide-content code {
+      background: rgba(255,255,255,0.07);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 0.75rem;
+      color: #c9d1d9;
+    }
+    .modal-divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+    .modal-footer-note {
+      font-size: 0.73rem; color: var(--muted); text-align: center; margin: 0;
+    }
   </style>
 </head>
 <body>
+
+<!-- ═══════════════════════ HELP MODAL ═══════════════════════ -->
+<div class="modal-backdrop" id="help-modal" onclick="closeHelp(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeHelpBtn()">✕</button>
+    <h2>🤖 How to Use URDF Exporter</h2>
+    <p class="modal-sub">Export your Onshape CAD assembly to a URDF robot model in a few steps.</p>
+
+    <div class="guide-step">
+      <div class="guide-num">1</div>
+      <div class="guide-content">
+        <strong>Get your Onshape API Keys</strong>
+        <p>Go to <a href="https://cad.onshape.com/user/developer/apiKeys" target="_blank">cad.onshape.com → Account → API Keys</a>, click <em>Create New API Key</em>, and copy the <code>Access Key</code> and <code>Secret Key</code>.</p>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="guide-num">2</div>
+      <div class="guide-content">
+        <strong>Enter API Keys in the sidebar</strong>
+        <p>Open <em>API Credentials</em> in the left panel. Paste your Access Key and Secret Key. Check <em>Remember on this device</em> to avoid re-entering them next time — keys are stored locally in your browser only.</p>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="guide-num">3</div>
+      <div class="guide-content">
+        <strong>Paste your Onshape Document URL</strong>
+        <p>Open your assembly in Onshape and copy the full URL from the browser address bar. It should look like:<br>
+        <code>https://cad.onshape.com/documents/abc123.../…</code><br>
+        Paste it into the <em>Document URL</em> field.</p>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="guide-num">4</div>
+      <div class="guide-content">
+        <strong>Set the Assembly Name</strong>
+        <p>Enter the exact name of your top-level assembly in Onshape (case-sensitive). Default is <code>URDF_Top_Assembly</code>. You can find the assembly name in the Onshape tab at the bottom of the editor.</p>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="guide-num">5</div>
+      <div class="guide-content">
+        <strong>Click Export and wait</strong>
+        <p>Click the <em>Export URDF</em> button. The progress bar will track each stage (fetching parts, generating meshes, writing URDF). This usually takes 1–5 minutes depending on assembly complexity.</p>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="guide-num">6</div>
+      <div class="guide-content">
+        <strong>Preview and Download</strong>
+        <p>Once done, the 3D viewer loads automatically. Use <em>Joint Controls</em> on the right to pose the robot. Click <em>Download ZIP</em> in the toolbar to save the complete URDF package.</p>
+      </div>
+    </div>
+
+    <hr class="modal-divider">
+    <p class="modal-footer-note">💡 API keys are never stored on the server — only in your browser's localStorage.</p>
+  </div>
+</div>
 
 <!-- ═══════════════════════ HEADER ═══════════════════════ -->
 <header>
   <span class="logo">⬡</span>
   <h1>URDF Exporter — Onshape to Robot</h1>
+  <button class="help-btn" onclick="openHelp()" title="How to use">?</button>
   <span id="status-badge" class="badge"></span>
 </header>
 
@@ -1371,10 +1514,25 @@ function maybeSaveKeys() {
 // ──────────────────────────────────────────────────────────────
 // Expose to global scope (needed by onclick= attributes in HTML)
 // ──────────────────────────────────────────────────────────────
+// ── Help modal ──
+function openHelp() {
+  document.getElementById('help-modal').classList.add('open');
+}
+function closeHelpBtn() {
+  document.getElementById('help-modal').classList.remove('open');
+  localStorage.setItem('helpSeen', '1');
+}
+function closeHelp(e) {
+  // close only when clicking the backdrop itself (not the modal box)
+  if (e.target === document.getElementById('help-modal')) closeHelpBtn();
+}
+// Auto-open on first visit
+if (!localStorage.getItem('helpSeen')) openHelp();
+
 Object.assign(window, {
   startExport, downloadZip, fitCamera, resetJoints,
   toggleWireframe, loadRobot, setJointValue, refreshStats,
-  onRememberChange,
+  onRememberChange, openHelp, closeHelpBtn, closeHelp,
 });
 
 // ──────────────────────────────────────────────────────────────
