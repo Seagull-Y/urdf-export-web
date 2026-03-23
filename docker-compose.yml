@@ -7,6 +7,7 @@ services:
       - "0.0.0.0:8000:8000"
     volumes:
       - ./jobs:/app/jobs
+      - ./static:/app/static
     environment:
       - ONSHAPE_ACCESS_KEY=${ONSHAPE_ACCESS_KEY:-}
       - ONSHAPE_SECRET_KEY=${ONSHAPE_SECRET_KEY:-}
