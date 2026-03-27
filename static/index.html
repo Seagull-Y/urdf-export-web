@@ -477,6 +477,38 @@
       color: var(--accent);
       flex-shrink: 0;
     }
+    .parts-progress {
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid var(--border);
+    }
+    .parts-label {
+      font-size: 0.7rem;
+      color: var(--accent2);
+      font-family: monospace;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .parts-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .parts-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    @keyframes indeterminate {
+      0%   { transform: translateX(-100%); width: 40%; }
+      100% { transform: translateX(300%);  width: 40%; }
+    }
+    .parts-fill-indeterminate {
+      width: 40% !important;
+      animation: indeterminate 1.4s infinite linear;
+    }
     #progress-task {
       font-size: 0.72rem;
       color: var(--muted);
@@ -1311,6 +1343,40 @@ function setProgress(pct, task) {
   if (task !== undefined) document.getElementById('progress-task').textContent = task;
 }
 
+function updatePartsProgress(n, total, partName) {
+  // Show / update parts download counter below the main progress bar
+  let bar = document.getElementById('parts-progress');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'parts-progress';
+    bar.className = 'parts-progress';
+    const wrap = document.getElementById('progress-wrap');
+    if (wrap) wrap.appendChild(bar);
+  }
+
+  const pct   = total ? Math.round((n / total) * 100) : null;
+  const label = total ? `Downloading parts: ${n} / ${total}` : `Downloading parts: ${n}`;
+  const fill  = pct !== null
+    ? `<div class="parts-fill" style="width:${pct}%"></div>`
+    : `<div class="parts-fill parts-fill-indeterminate"></div>`;
+
+  bar.innerHTML =
+    `<div class="parts-label">${label}</div>` +
+    `<div class="parts-track">${fill}</div>`;
+
+  // Also drive main progress bar during parts download phase (25%–78%)
+  if (total && pct !== null) {
+    const mapped = 25 + Math.round(pct * 0.53);
+    if (mapped > currentProgress) {
+      currentProgress = mapped;
+      document.getElementById('progress-fill').style.width = `${currentProgress}%`;
+      document.getElementById('progress-pct').textContent = `${currentProgress}%`;
+    }
+  }
+  document.getElementById('progress-task').textContent =
+    partName.length > 55 ? partName.slice(0, 53) + '…' : partName;
+}
+
 // ──────────────────────────────────────────────────────────────
 // Status card helpers
 // ──────────────────────────────────────────────────────────────
@@ -1404,14 +1470,26 @@ function streamLogs(jobId) {
     const data = JSON.parse(e.data);
 
     if (data.line !== undefined) {
+      const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '');
+
+      // ── Part download progress: "[PARTS] N/TOTAL — partname" ──
+      const mParts = clean.match(/^\[PARTS\]\s+(\d+)\/(\d+|\?)\s+—\s+(.+)/);
+      if (mParts) {
+        const n = parseInt(mParts[1]);
+        const total = mParts[2] === '?' ? null : parseInt(mParts[2]);
+        const partName = mParts[3].trim();
+        updatePartsProgress(n, total, partName);
+        // Show in log as a compact line (not the raw [PARTS] tag)
+        log(`  ↳ [${n}${total ? '/' + total : ''}] ${partName}`);
+        return;
+      }
+
       log(data.line);
       advanceProgress(data.line);
       // Collect parts with no mass + update running status detail
-      const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '');
       const m = clean.match(/WARNING: part (.+?) has no mass/);
       if (m) noMassParts.add(m[1].trim());
       if (clean && !checkForErrors(data.line)) {
-        // Only update detail if no error was just shown
         const card = document.getElementById('status-card');
         if (card.classList.contains('s-running')) {
           document.getElementById('status-detail').textContent =
@@ -1423,6 +1501,7 @@ function streamLogs(jobId) {
     if (data.done) {
       sseSource.close();
       resetExportBtn();
+      document.getElementById('parts-progress')?.remove();
       showNoMassWarning(noMassParts);
 
       if (data.status === 'success') {

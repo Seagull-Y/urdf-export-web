@@ -294,41 +294,69 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
     MAX_RETRIES   = 3
     RETRY_DELAYS  = [15, 45, 90]   # seconds before each retry
 
-    last_exc = None
+    import re as _re
+
+    last_exc      = None
+    captured_out  = []   # accumulate output for timeout detection on failure
+
     for attempt in range(MAX_RETRIES):
+        captured_out.clear()
+        part_count  = 0
+        total_parts = 0
+
         try:
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
-                check=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
+                bufsize=1,
                 env=env,
             )
-            # ── Success ──
-            print(result.stdout)
-            if result.stderr:
-                print(result.stderr)
-            break   # exit retry loop
+
+            for raw_line in proc.stdout:
+                line = raw_line.rstrip()
+                captured_out.append(line)
+
+                # Parse total parts from "Found X root nodes"
+                m_total = _re.search(r'Found (\d+) root nodes', line)
+                if m_total:
+                    total_parts = int(m_total.group(1))
+
+                # Count each part being added and emit inline progress
+                if line.startswith('+ Adding part '):
+                    part_count += 1
+                    if total_parts:
+                        print(f"[PARTS] {part_count}/{total_parts} — {line[14:]}", flush=True)
+                    else:
+                        print(f"[PARTS] {part_count}/? — {line[14:]}", flush=True)
+                else:
+                    print(line, flush=True)
+
+            proc.wait()
+
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    proc.returncode, cmd,
+                    output='\n'.join(captured_out),
+                )
+
+            break   # ── Success ──
 
         except subprocess.CalledProcessError as e:
             last_exc = e
-            combined = (e.stdout or '') + (e.stderr or '')
+            combined = '\n'.join(captured_out)
             is_timeout = any(sig in combined for sig in _TIMEOUT_SIGNALS)
 
             if is_timeout and attempt < MAX_RETRIES - 1:
                 delay = RETRY_DELAYS[attempt]
-                print(f"\n⚠ Network timeout on attempt {attempt + 1}/{MAX_RETRIES}.")
-                print(f"  Already-fetched parts are cached — retrying in {delay}s…")
+                print(f"\n⚠ Network timeout on attempt {attempt + 1}/{MAX_RETRIES}.", flush=True)
+                print(f"  Already-fetched parts are cached — retrying in {delay}s…", flush=True)
                 time.sleep(delay)
-                continue   # next attempt, same output_path → cache reused
+                continue
 
-            # Non-timeout error, or final attempt exhausted
-            print(f"\n✗ Error during URDF export:")
-            print(f"  Return code: {e.returncode}")
-            if e.stdout:
-                print(f"  Output: {e.stdout}")
-            if e.stderr:
-                print(f"  Error output: {e.stderr}")
+            print(f"\n✗ Error during URDF export:", flush=True)
+            print(f"  Return code: {e.returncode}", flush=True)
             raise
 
         except FileNotFoundError:
@@ -337,10 +365,7 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
                 "Please install it using: pip install onshape-to-robot"
             )
     else:
-        # All retries exhausted
-        print(f"\n✗ Export failed after {MAX_RETRIES} attempts (network timeout).")
-        if last_exc:
-            print(f"  Last error: {last_exc.stdout or ''}{last_exc.stderr or ''}")
+        print(f"\n✗ Export failed after {MAX_RETRIES} attempts (network timeout).", flush=True)
         raise last_exc
 
     # ── Post-processing (only reached on success) ──
