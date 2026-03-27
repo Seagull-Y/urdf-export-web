@@ -1509,10 +1509,27 @@ function showNoMassWarning(parts) {
   const unique = [...parts];
   const div = document.createElement('div');
   div.id = 'no-mass-warning';
-  div.innerHTML =
-    `<div class="no-mass-header">⚠ ${unique.length} part${unique.length > 1 ? 's' : ''} have no material assigned — mass/inertia skipped</div>` +
-    `<div class="no-mass-list">${unique.map(p => `<span class="no-mass-chip">${p}</span>`).join('')}</div>` +
-    `<div class="no-mass-hint">Assign a material in Onshape to include dynamics in the URDF.</div>`;
+
+  const header = document.createElement('div');
+  header.className = 'no-mass-header';
+  header.textContent = `⚠ ${unique.length} part${unique.length > 1 ? 's' : ''} have no material assigned — mass/inertia skipped`;
+
+  const list = document.createElement('div');
+  list.className = 'no-mass-list';
+  unique.forEach(p => {
+    const chip = document.createElement('span');
+    chip.className = 'no-mass-chip';
+    chip.textContent = p;
+    list.appendChild(chip);
+  });
+
+  const hint = document.createElement('div');
+  hint.className = 'no-mass-hint';
+  hint.textContent = 'Assign a material in Onshape to include dynamics in the URDF.';
+
+  div.appendChild(header);
+  div.appendChild(list);
+  div.appendChild(hint);
 
   const logBox = document.getElementById('log-box');
   logBox.parentNode.insertBefore(div, logBox);
