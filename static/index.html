@@ -166,7 +166,7 @@
     }
     /* ── Joint panel ── */
     .joints-panel {
-      width: 210px;
+      width: 315px;
       background: rgba(13,13,26,0.55);
       border: 1px solid rgba(255,255,255,0.07);
       border-radius: 8px;
@@ -196,9 +196,9 @@
     .joints-empty { color: var(--muted); font-size: 0.78rem; padding: 8px 0; text-align: center; }
     .joint-row {
       display: grid;
-      grid-template-columns: 74px 1fr 52px;
+      grid-template-columns: 89px 1fr 52px;
       align-items: center;
-      gap: 6px;
+      column-gap: 2px;
       margin-bottom: 7px;
     }
     .joint-name {
@@ -239,7 +239,7 @@
       border: 1px solid rgba(255,255,255,0.07);
       border-radius: 8px;
       padding: 10px 12px;
-      min-width: 155px;
+      min-width: 315px;
       backdrop-filter: blur(6px);
       display: none;
       flex-shrink: 0;
@@ -280,7 +280,7 @@
       color: var(--muted);
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 88px;
+      max-width: 106px;
       flex: 1;
     }
     .mass-entry-val {
@@ -648,8 +648,8 @@
       .right-panel { display: block; overflow: visible; }
       .viewer-wrap { height: 420px; min-height: 420px; }
       #right-overlay { right: 6px; }
-      .joints-panel { width: 175px; }
-      .joint-row { grid-template-columns: 60px 1fr 46px; }
+      .joints-panel { width: 263px; }
+      .joint-row { grid-template-columns: 72px 1fr 46px; column-gap: 2px; }
     }
     /* ── Help modal ── */
     .help-btn {

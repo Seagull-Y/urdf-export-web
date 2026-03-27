@@ -411,7 +411,13 @@ def _prewarm_cache(output_config_file, document_id, assembly_name, access_key, s
                 print(f"[PREWARM] {n}/{total} cached ({f} errors)", flush=True)
         return ok
 
-    with ThreadPoolExecutor(max_workers=5, initializer=get_client) as executor:
+    # Skip pre-warm for small assemblies — direct download is fast enough
+    PREWARM_THRESHOLD = 10
+    if total <= PREWARM_THRESHOLD:
+        print(f"[PREWARM] {total} parts — skipping pre-warm (≤{PREWARM_THRESHOLD}), downloading directly", flush=True)
+        return
+
+    with ThreadPoolExecutor(max_workers=10, initializer=get_client) as executor:
         list(executor.map(warm_part, unique_parts))
 
     cached = done_count[0] - fail_count[0]
