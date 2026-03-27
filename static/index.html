@@ -920,8 +920,14 @@
           <path d="M2 17l10 5 10-5"/>
           <path d="M2 12l10 5 10-5"/>
         </svg>
-        <p>3D model appears here after a successful export</p>
+        <p id="viewer-placeholder-msg">3D model appears here after a successful export</p>
         <p style="font-size:0.72rem;color:var(--muted)">Drag to orbit · Scroll to zoom · Right-drag to pan</p>
+        <div id="viewer-load-progress" style="display:none;width:200px;margin-top:10px">
+          <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px" id="viewer-load-label">Loading meshes…</div>
+          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div id="viewer-load-bar" style="height:100%;width:0%;background:var(--accent);transition:width 0.1s ease;border-radius:2px"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Viewer toolbar -->
@@ -1144,47 +1150,64 @@ async function loadRobot(jobId) {
   const colorByFile = extractColors(urdfText);
   const linkMasses = extractLinkMasses(urdfText);
 
-  // 3. Configure urdf-loader
+  // 3. Extract all unique mesh paths from URDF
+  const meshPaths = [...new Set(
+    [...urdfText.matchAll(/filename="([^"]+\.stl)"/gi)].map(m => m[1])
+  )];
+
+  // 4. Pre-fetch ALL STL files in parallel using fetch() + HTTP/2 multiplexing
+  //    This avoids XHR-per-mesh queuing and saturates available bandwidth fully.
+  const loadBar   = document.getElementById('viewer-load-bar');
+  const loadLabel = document.getElementById('viewer-load-label');
+  const loadProg  = document.getElementById('viewer-load-progress');
+  loadProg.style.display = 'block';
+  document.getElementById('viewer-placeholder-msg').textContent = 'Loading 3D viewer…';
+
+  const bufferMap = new Map();
+  let done = 0;
+  await Promise.all(meshPaths.map(async path => {
+    try {
+      const r = await fetch(`/api/jobs/${jobId}/files/${path}`);
+      if (r.ok) bufferMap.set(path, await r.arrayBuffer());
+    } catch (e) { /* missing mesh — skip silently */ }
+    done++;
+    const pct = Math.round(done / meshPaths.length * 100);
+    loadBar.style.width = pct + '%';
+    loadLabel.textContent = `Loading meshes… ${done} / ${meshPaths.length}`;
+  }));
+
+  loadProg.style.display = 'none';
+
+  // 5. Configure urdf-loader — parse each STL synchronously from pre-fetched buffer
   const loader = new URDFLoader();
-  const pendingLoads = [];
-
-  loader.loadMeshCb = (path, _manager, done) => {
+  loader.loadMeshCb = (path, _manager, doneCb) => {
     const filename = path.split('/').pop();
-    const url = `/api/jobs/${jobId}/files/${path}`;
     const color = colorByFile[filename] || hashColor(filename);
-
-    const p = new Promise(resolve => {
-      new STLLoader().load(
-        url,
-        geo => {
-          geo.computeVertexNormals();
-          const mat = new THREE.MeshPhongMaterial({ color, specular: 0x222244, shininess: 30 });
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.castShadow = mesh.receiveShadow = true;
-          done(mesh);
-          resolve();
-        },
-        undefined,
-        err => { console.warn('STL load failed:', filename, err); done(null, err); resolve(); }
-      );
-    });
-    pendingLoads.push(p);
+    const buf = bufferMap.get(path);
+    if (buf) {
+      const geo = new STLLoader().parse(buf);
+      geo.computeVertexNormals();
+      const mat = new THREE.MeshPhongMaterial({ color, specular: 0x222244, shininess: 30 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      doneCb(mesh);
+    } else {
+      console.warn('STL not found in buffer cache:', path);
+      doneCb(null, new Error('not found'));
+    }
   };
 
-  // 4. Parse URDF — synchronous, calls loadMeshCb for each mesh
+  // 6. Parse URDF — synchronous; loadMeshCb now runs synchronously from memory
   const robot = loader.parse(urdfText);
 
-  // 5. Wait for all STL fetches to finish
-  await Promise.all(pendingLoads);
-
-  // 6. URDF = Z-up; Three.js = Y-up
+  // 7. URDF = Z-up; Three.js = Y-up
   robot.rotation.x = -Math.PI / 2;
 
-  // 7. Keep robot at URDF origin (XZ = 0,0); only lift above grid if it clips below y=0
+  // 8. Keep robot at URDF origin (XZ = 0,0); only lift above grid if it clips below y=0
   const box = new THREE.Box3().setFromObject(robot);
   if (box.min.y < 0) robot.position.y -= box.min.y;
 
-  // 8. Swap old model
+  // 9. Swap old model
   if (robotRoot) scene.remove(robotRoot);
   robotRoot = robot;
   scene.add(robotRoot);
@@ -1193,7 +1216,7 @@ async function loadRobot(jobId) {
   document.getElementById('viewer-placeholder').style.display = 'none';
   document.getElementById('viewer-toolbar').style.display = 'flex';
 
-  // 9. Build joint controls + mass annotations
+  // 10. Build joint controls + mass annotations
   robot.updateMatrixWorld(true);
   addMassAnnotations(robot, linkMasses);
   buildJointSliders(robot);

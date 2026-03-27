@@ -26,6 +26,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -33,6 +34,7 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 app = FastAPI(title="URDF Exporter", version="1.0.0")
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
