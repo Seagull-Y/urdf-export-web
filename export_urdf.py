@@ -588,14 +588,6 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
             if is_rate_limit or is_auth_error:
                 raise
 
-            # Auto-retry with noDynamics if some parts lack mass data
-            if is_mass_error and not config_data.get('noDynamics') and attempt < MAX_RETRIES - 1:
-                print(f"\n⚠ Some parts have no mass — retrying with noDynamics enabled (mass panel will be hidden)…", flush=True)
-                config_data['noDynamics'] = True
-                with open(output_config_file, 'w') as f:
-                    json.dump(config_data, f, indent=2)
-                continue
-
             if is_timeout and attempt < MAX_RETRIES - 1:
                 delay = RETRY_DELAYS[attempt]
                 print(f"\n⚠ Network timeout on attempt {attempt + 1}/{MAX_RETRIES}.", flush=True)

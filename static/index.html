@@ -1255,12 +1255,12 @@ function addMassAnnotations(robot, linkMasses) {
 
   const fmtG = g => g >= 1000 ? `${(g / 1000).toFixed(2)} kg` : `${Math.round(g)} g`;
 
-  // Split into links with mass data vs links with visual but no mass
+  // Split into: links with real mass | links with no mass (null = no <inertial>, 0 = patched zero mass)
   const withMass = Object.entries(linkMasses)
-    .filter(([n, m]) => m !== null && m >= 0.5 && robot.links?.[n])
+    .filter(([n, m]) => m !== null && m > 0 && robot.links?.[n])
     .sort(([a], [b]) => a.localeCompare(b));
   const noMass = Object.entries(linkMasses)
-    .filter(([n, m]) => m === null && robot.links?.[n])
+    .filter(([n, m]) => (m === null || m <= 0) && robot.links?.[n])
     .sort(([a], [b]) => a.localeCompare(b));
 
   if (!withMass.length && !noMass.length) { panel.style.display = 'none'; return; }
@@ -1282,7 +1282,7 @@ function addMassAnnotations(robot, linkMasses) {
       `<div class="mass-entry">` +
         `<span class="mass-entry-dot" style="background:#ff453a"></span>` +
         `<span class="mass-entry-name" title="${label}" style="color:#ff453a">${label}</span>` +
-        `<span class="mass-entry-val" style="color:#ff453a">—</span>` +
+        `<span class="mass-entry-val" style="color:#ff453a">no weight</span>` +
       `</div>`;
   });
 
