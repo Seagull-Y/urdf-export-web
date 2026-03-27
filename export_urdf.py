@@ -267,9 +267,16 @@ def _prewarm_cache(output_config_file, document_id, assembly_name, access_key, s
     # Resolve workspace ID
     try:
         doc = main_client.get_document(document_id)
+        if not doc or "defaultWorkspace" not in doc:
+            print("[PREWARM] Unexpected document response, skipping pre-warm", flush=True)
+            return
         workspace_id = doc["defaultWorkspace"]["id"]
     except Exception as e:
-        print(f"[PREWARM] Could not get document: {e}", flush=True)
+        msg = str(e)
+        if "402" in msg or "limit" in msg.lower():
+            print("[PREWARM] Onshape API limit exceeded — skipping pre-warm", flush=True)
+        else:
+            print(f"[PREWARM] Could not get document: {e}", flush=True)
         return
 
     # Find assembly element ID
@@ -349,7 +356,7 @@ def _prewarm_cache(output_config_file, document_id, assembly_name, access_key, s
         print("[PREWARM] No parts found, skipping pre-warm", flush=True)
         return
 
-    print(f"[PREWARM] Pre-warming {total} unique parts in parallel (10 workers)...", flush=True)
+    print(f"[PREWARM] Pre-warming {total} unique parts in parallel (5 workers)...", flush=True)
 
     done_count = [0]
     fail_count = [0]
@@ -402,7 +409,7 @@ def _prewarm_cache(output_config_file, document_id, assembly_name, access_key, s
                 print(f"[PREWARM] {n}/{total} cached ({f} errors)", flush=True)
         return ok
 
-    with ThreadPoolExecutor(max_workers=10, initializer=get_client) as executor:
+    with ThreadPoolExecutor(max_workers=5, initializer=get_client) as executor:
         list(executor.map(warm_part, unique_parts))
 
     cached = done_count[0] - fail_count[0]
@@ -487,6 +494,10 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
         'TimeoutError', 'Max retries exceeded',
         'ConnectTimeout',
     )
+    _RATE_LIMIT_SIGNALS = (
+        'API limit exceeded', 'ERROR (402)', 'ERROR (429)',
+        '"status" : 402', '"status" : 429',
+    )
     MAX_RETRIES   = 3
     RETRY_DELAYS  = [15, 45, 90]   # seconds before each retry
 
@@ -531,19 +542,32 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
 
             proc.wait()
 
+            combined = '\n'.join(captured_out)
+            is_rate_limit = any(sig in combined for sig in _RATE_LIMIT_SIGNALS)
+
+            if is_rate_limit:
+                # API limit hit — no point retrying, fail immediately
+                print(f"\n✗ Onshape API limit exceeded — please wait before retrying or upgrade your plan.", flush=True)
+                raise subprocess.CalledProcessError(402, cmd, output=combined)
+
             if proc.returncode != 0:
                 raise subprocess.CalledProcessError(
                     proc.returncode, cmd,
-                    output='\n'.join(captured_out),
+                    output=combined,
                 )
 
             break   # ── Success ──
 
         except subprocess.CalledProcessError as e:
             last_exc = e
-            combined = '\n'.join(captured_out)
-            is_timeout = any(sig in combined for sig in _TIMEOUT_SIGNALS)
-            is_mass_error = any(sig in combined for sig in ("KeyError: 'mass'", 'KeyError: "mass"', 'has no mass'))
+            out = e.output or '\n'.join(captured_out)
+            is_timeout = any(sig in out for sig in _TIMEOUT_SIGNALS)
+            is_rate_limit = any(sig in out for sig in _RATE_LIMIT_SIGNALS) or e.returncode == 402
+            is_mass_error = any(sig in out for sig in ("KeyError: 'mass'", 'KeyError: "mass"', 'has no mass'))
+
+            # Rate limit — no retry, fail immediately with clear message
+            if is_rate_limit:
+                raise
 
             # Auto-retry with noDynamics if some parts lack mass data
             if is_mass_error and not config_data.get('noDynamics') and attempt < MAX_RETRIES - 1:
