@@ -983,6 +983,37 @@ const MILESTONES = [
   [/Export successful|✓.*export/i,               98],
 ];
 
+// Phase label rules: [regex, friendly label (string or fn(match))]
+// Used to display a human-readable task name in the status card detail.
+const PHASE_RULES = [
+  [/Running export script/,                     'Running export script…'],
+  [/Pre-warming part cache/,                    'Starting parallel cache pre-warm…'],
+  [/unique parts in parallel/,                  'Pre-warming part cache in parallel…'],
+  [/Running command.*onshape|Starting URDF export/, 'Starting URDF export…'],
+  [/Retrieving assembly/,                       'Fetching assembly structure…'],
+  [/Found (\d+) root nodes/,                    m => `Assembly has ${m[1]} parts — building robot…`],
+  [/Processing.*link|Building.*tree|root node/, 'Assembling robot link tree…'],
+  [/Fixing mesh|Fixed.*path/,                   'Fixing mesh file paths…'],
+  [/Cleaning up/,                               'Cleaning up temporary files…'],
+  [/Export completed|✓.*export/i,               'Export complete!'],
+];
+
+function setStatusPhase(text) {
+  const card = document.getElementById('status-card');
+  if (card && card.classList.contains('s-running')) {
+    document.getElementById('status-detail').textContent = text;
+  }
+}
+
+// Apply PHASE_RULES to a log line; returns friendly label or null
+function matchPhaseLabel(clean) {
+  for (const [rx, label] of PHASE_RULES) {
+    const m = clean.match(rx);
+    if (m) return typeof label === 'function' ? label(m) : label;
+  }
+  return null;
+}
+
 // Error patterns that trigger the status card error state
 const ERROR_PATTERNS = [
   [/ONSHAPE_ACCESS_KEY|ONSHAPE_SECRET_KEY|credentials not found|missing.*credential|credential.*missing/i, 'API Credentials Missing'],
@@ -1506,15 +1537,17 @@ function streamLogs(jobId) {
       const mWarm = clean.match(/^\[PREWARM\]\s+(.*)/);
       if (mWarm) {
         const msg = mWarm[1].trim();
-        // Show a compact pre-warm counter but keep it out of the main log noise
         updatePrewarmProgress(msg);
         log(`  ⚡ ${msg}`, 'info');
-        // Advance main bar to indicate active pre-warming (17%–24%)
+        // Update status card detail
         const mCnt = msg.match(/(\d+)\/(\d+)/);
         if (mCnt) {
           const n = parseInt(mCnt[1]), tot = parseInt(mCnt[2]);
           const mapped = 17 + Math.round((n / tot) * 7);
           if (mapped > currentProgress) setProgress(mapped, `Pre-warming cache: ${n}/${tot}`);
+          setStatusPhase(`⚡ Pre-warming part cache: ${n} / ${tot}`);
+        } else {
+          setStatusPhase(`⚡ ${msg}`);
         }
         return;
       }
@@ -1526,21 +1559,24 @@ function streamLogs(jobId) {
         const total = mParts[2] === '?' ? null : parseInt(mParts[2]);
         const partName = mParts[3].trim();
         updatePartsProgress(n, total, partName);
-        // Show in log as a compact line (not the raw [PARTS] tag)
         log(`  ↳ [${n}${total ? '/' + total : ''}] ${partName}`);
+        // Update status card detail
+        setStatusPhase(total ? `Building robot: ${n} / ${total} parts` : `Building robot: ${n} parts`);
         return;
       }
 
       log(data.line);
       advanceProgress(data.line);
-      // Collect parts with no mass + update running status detail
+      // Collect parts with no mass
       const m = clean.match(/WARNING: part (.+?) has no mass/);
       if (m) noMassParts.add(m[1].trim());
+      // Update status card detail: prefer a friendly phase label, fall back to raw line
       if (clean && !checkForErrors(data.line)) {
         const card = document.getElementById('status-card');
         if (card.classList.contains('s-running')) {
+          const phase = matchPhaseLabel(clean);
           document.getElementById('status-detail').textContent =
-            clean.length > 80 ? clean.slice(0, 78) + '…' : clean;
+            phase || (clean.length > 80 ? clean.slice(0, 78) + '…' : clean);
         }
       }
     }
