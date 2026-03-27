@@ -390,6 +390,39 @@
     .btn-green:hover { background: #14532d; }
 
     /* ── Log terminal ── */
+    #no-mass-warning {
+      margin-bottom: 8px;
+      border: 1px solid #854d0e;
+      border-left: 3px solid var(--warn);
+      border-radius: 6px;
+      background: rgba(251,191,36,0.07);
+      padding: 10px 12px;
+      font-size: 0.78rem;
+    }
+    .no-mass-header {
+      color: var(--warn);
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .no-mass-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .no-mass-chip {
+      background: rgba(251,191,36,0.15);
+      border: 1px solid rgba(251,191,36,0.3);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: #fde68a;
+      font-family: monospace;
+      font-size: 0.75rem;
+    }
+    .no-mass-hint {
+      color: var(--muted);
+      font-size: 0.73rem;
+    }
     #log-box {
       background: #070710;
       border: 1px solid var(--border);
@@ -1363,6 +1396,7 @@ async function startExport() {
 function streamLogs(jobId) {
   if (sseSource) sseSource.close();
   let errCount = 0;
+  const noMassParts = new Set();
   sseSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
   sseSource.onmessage = e => {
@@ -1372,6 +1406,10 @@ function streamLogs(jobId) {
     if (data.line !== undefined) {
       log(data.line);
       advanceProgress(data.line);
+      // Collect parts with no mass
+      const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '');
+      const m = clean.match(/WARNING: part (.+?) has no mass/);
+      if (m) noMassParts.add(m[1].trim());
       // Update running status detail with current task
       const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '').trim();
       if (clean && !checkForErrors(data.line)) {
@@ -1387,6 +1425,7 @@ function streamLogs(jobId) {
     if (data.done) {
       sseSource.close();
       resetExportBtn();
+      showNoMassWarning(noMassParts);
 
       if (data.status === 'success') {
         setProgress(100, 'Export complete');
@@ -1464,6 +1503,23 @@ function streamLogs(jobId) {
 // ──────────────────────────────────────────────────────────────
 // UI helpers
 // ──────────────────────────────────────────────────────────────
+function showNoMassWarning(parts) {
+  const existing = document.getElementById('no-mass-warning');
+  if (existing) existing.remove();
+  if (!parts.size) return;
+
+  const unique = [...parts];
+  const div = document.createElement('div');
+  div.id = 'no-mass-warning';
+  div.innerHTML =
+    `<div class="no-mass-header">⚠ ${unique.length} part${unique.length > 1 ? 's' : ''} have no material assigned — mass/inertia skipped</div>` +
+    `<div class="no-mass-list">${unique.map(p => `<span class="no-mass-chip">${p}</span>`).join('')}</div>` +
+    `<div class="no-mass-hint">Assign a material in Onshape to include dynamics in the URDF.</div>`;
+
+  const logBox = document.getElementById('log-box');
+  logBox.parentNode.insertBefore(div, logBox);
+}
+
 function log(line, type = '') {
   const box = document.getElementById('log-box');
   if (box.querySelector('.log-muted')) box.innerHTML = '';
