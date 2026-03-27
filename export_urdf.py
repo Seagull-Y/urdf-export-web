@@ -275,6 +275,8 @@ def _prewarm_cache(output_config_file, document_id, assembly_name, access_key, s
         msg = str(e)
         if "402" in msg or "limit" in msg.lower():
             print("[PREWARM] Onshape API limit exceeded — skipping pre-warm", flush=True)
+        elif "403" in msg or "permission" in msg.lower():
+            print("[PREWARM] Onshape API access denied (403) — skipping pre-warm", flush=True)
         else:
             print(f"[PREWARM] Could not get document: {e}", flush=True)
         return
@@ -498,6 +500,11 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
         'API limit exceeded', 'ERROR (402)', 'ERROR (429)',
         '"status" : 402', '"status" : 429',
     )
+    _AUTH_ERROR_SIGNALS = (
+        'ERROR (403)', '"status" : 403',
+        'ERROR (401)', '"status" : 401',
+        'do not have permission', 'Resource does not exist',
+    )
     MAX_RETRIES   = 3
     RETRY_DELAYS  = [15, 45, 90]   # seconds before each retry
 
@@ -545,10 +552,15 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
             combined = '\n'.join(captured_out)
             is_rate_limit = any(sig in combined for sig in _RATE_LIMIT_SIGNALS)
 
+            is_auth_error = any(sig in combined for sig in _AUTH_ERROR_SIGNALS)
+
             if is_rate_limit:
-                # API limit hit — no point retrying, fail immediately
                 print(f"\n✗ Onshape API limit exceeded — please wait before retrying or upgrade your plan.", flush=True)
                 raise subprocess.CalledProcessError(402, cmd, output=combined)
+
+            if is_auth_error:
+                print(f"\n✗ Onshape API access denied (403) — the API credentials do not have permission to access this document. Share the document with your API account in Onshape.", flush=True)
+                raise subprocess.CalledProcessError(403, cmd, output=combined)
 
             if proc.returncode != 0:
                 raise subprocess.CalledProcessError(
@@ -563,10 +575,11 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
             out = e.output or '\n'.join(captured_out)
             is_timeout = any(sig in out for sig in _TIMEOUT_SIGNALS)
             is_rate_limit = any(sig in out for sig in _RATE_LIMIT_SIGNALS) or e.returncode == 402
+            is_auth_error = any(sig in out for sig in _AUTH_ERROR_SIGNALS) or e.returncode == 403
             is_mass_error = any(sig in out for sig in ("KeyError: 'mass'", 'KeyError: "mass"', 'has no mass'))
 
-            # Rate limit — no retry, fail immediately with clear message
-            if is_rate_limit:
+            # Rate limit or auth error — no retry
+            if is_rate_limit or is_auth_error:
                 raise
 
             # Auto-retry with noDynamics if some parts lack mass data
