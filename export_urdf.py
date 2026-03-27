@@ -6,6 +6,7 @@ Script to export URDF from Onshape using onshape-to-robot
 import os
 import sys
 import json
+import time
 import argparse
 import subprocess
 from pathlib import Path
@@ -262,6 +263,9 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
     # Prevent crash when parts have no material/mass assigned in Onshape
     if 'noDynamics' not in config_data:
         config_data['noDynamics'] = True
+    # Cache API responses so retries reuse already-fetched data (resume-style)
+    if 'cache' not in config_data:
+        config_data['cache'] = True
     
     # Write config.json to output directory
     with open(output_config_file, 'w') as f:
@@ -281,45 +285,76 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
     
     print(f"\nRunning command: {' '.join(cmd)}")
     print("Starting URDF export...")
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-        
-        # Fix mesh paths in the exported URDF
-        urdf_file = output_path / 'robot.urdf'
-        if urdf_file.exists():
-            print("\nFixing mesh file paths in URDF...")
-            fix_urdf_mesh_paths(urdf_file, output_path)
-        
-        # Clean up unnecessary files, keep only .urdf and .stl files
-        print("\nCleaning up unnecessary files...")
-        cleanup_export_directory(output_path)
-        
-        print(f"\n✓ URDF export completed successfully!")
-        print(f"  Output files saved to: {output_path.absolute()}")
-        print(f"  - URDF: robot.urdf")
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Error during URDF export:")
-        print(f"  Return code: {e.returncode}")
-        if e.stdout:
-            print(f"  Output: {e.stdout}")
-        if e.stderr:
-            print(f"  Error output: {e.stderr}")
-        raise
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            "onshape-to-robot command not found. "
-            "Please install it using: pip install onshape-to-robot"
-        )
+
+    _TIMEOUT_SIGNALS = (
+        'ConnectTimeoutError', 'Connection timed out',
+        'TimeoutError', 'Max retries exceeded',
+        'ConnectTimeout',
+    )
+    MAX_RETRIES   = 3
+    RETRY_DELAYS  = [15, 45, 90]   # seconds before each retry
+
+    last_exc = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            # ── Success ──
+            print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
+            break   # exit retry loop
+
+        except subprocess.CalledProcessError as e:
+            last_exc = e
+            combined = (e.stdout or '') + (e.stderr or '')
+            is_timeout = any(sig in combined for sig in _TIMEOUT_SIGNALS)
+
+            if is_timeout and attempt < MAX_RETRIES - 1:
+                delay = RETRY_DELAYS[attempt]
+                print(f"\n⚠ Network timeout on attempt {attempt + 1}/{MAX_RETRIES}.")
+                print(f"  Already-fetched parts are cached — retrying in {delay}s…")
+                time.sleep(delay)
+                continue   # next attempt, same output_path → cache reused
+
+            # Non-timeout error, or final attempt exhausted
+            print(f"\n✗ Error during URDF export:")
+            print(f"  Return code: {e.returncode}")
+            if e.stdout:
+                print(f"  Output: {e.stdout}")
+            if e.stderr:
+                print(f"  Error output: {e.stderr}")
+            raise
+
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                "onshape-to-robot command not found. "
+                "Please install it using: pip install onshape-to-robot"
+            )
+    else:
+        # All retries exhausted
+        print(f"\n✗ Export failed after {MAX_RETRIES} attempts (network timeout).")
+        if last_exc:
+            print(f"  Last error: {last_exc.stdout or ''}{last_exc.stderr or ''}")
+        raise last_exc
+
+    # ── Post-processing (only reached on success) ──
+    urdf_file = output_path / 'robot.urdf'
+    if urdf_file.exists():
+        print("\nFixing mesh file paths in URDF...")
+        fix_urdf_mesh_paths(urdf_file, output_path)
+
+    print("\nCleaning up unnecessary files...")
+    cleanup_export_directory(output_path)
+
+    print(f"\n✓ URDF export completed successfully!")
+    print(f"  Output files saved to: {output_path.absolute()}")
+    print(f"  - URDF: robot.urdf")
 
 
 def export_urdf_python(onshape_url, assembly_name, output_dir='output', config_file=None, 
