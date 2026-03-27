@@ -985,7 +985,7 @@ const MILESTONES = [
 
 // Error patterns that trigger the status card error state
 const ERROR_PATTERNS = [
-  [/ONSHAPE_ACCESS_KEY|ONSHAPE_SECRET_KEY|credential/i, 'API Credentials Missing'],
+  [/ONSHAPE_ACCESS_KEY|ONSHAPE_SECRET_KEY|credentials not found|missing.*credential|credential.*missing/i, 'API Credentials Missing'],
   [/401|Unauthorized|authentication/i,                  'Authentication Failed'],
   [/403|Forbidden/i,                                    'Access Denied'],
   [/404|not found|can't be found/i,                     'Resource Not Found'],
