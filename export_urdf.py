@@ -259,6 +259,9 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
     config_data['assemblyName'] = assembly_name
     if 'outputFormat' not in config_data:
         config_data['outputFormat'] = 'urdf'
+    # Prevent crash when parts have no material/mass assigned in Onshape
+    if 'noDynamics' not in config_data:
+        config_data['noDynamics'] = True
     
     # Write config.json to output directory
     with open(output_config_file, 'w') as f:
