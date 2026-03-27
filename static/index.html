@@ -178,8 +178,7 @@
       padding: 10px 12px;
       pointer-events: auto;
       display: none;   /* hidden until robot loads */
-      flex: 1 1 0;
-      min-height: 0;
+      max-height: 240px;
     }
     .joints-panel.visible { display: block; }
     .joints-panel::-webkit-scrollbar { width: 4px; }
@@ -247,6 +246,14 @@
       display: none;
       flex-shrink: 0;
     }
+    .mass-entries-scroll {
+      max-height: 152px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      margin-bottom: 2px;
+    }
+    .mass-entries-scroll::-webkit-scrollbar { width: 4px; }
+    .mass-entries-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     .mass-panel-title {
       font-size: 0.6rem;
       font-weight: 700;
@@ -1250,17 +1257,19 @@ function addMassAnnotations(robot, linkMasses) {
   const totalG = Object.values(linkMasses).reduce((s, m) => s + m, 0);
   const fmtG = g => g >= 1000 ? `${(g / 1000).toFixed(2)} kg` : `${Math.round(g)} g`;
 
-  let html = '<div class="mass-panel-title">Link Mass</div>';
+  let entries = '';
   valid.forEach(([linkName, massG], i) => {
     const hex   = ANNOT_PALETTE[i % ANNOT_PALETTE.length];
     const label = linkName.replace(/_/g, ' ');
-    html +=
+    entries +=
       `<div class="mass-entry">` +
         `<span class="mass-entry-dot" style="background:${hex}"></span>` +
         `<span class="mass-entry-name" title="${label}">${label}</span>` +
         `<span class="mass-entry-val" style="color:${hex}">${fmtG(massG)}</span>` +
       `</div>`;
   });
+  let html = '<div class="mass-panel-title">Link Mass</div>' +
+    `<div class="mass-entries-scroll">${entries}</div>`;
   if (totalG > 0) {
     html +=
       `<div class="mass-panel-total">` +
