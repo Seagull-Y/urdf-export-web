@@ -5,7 +5,11 @@ A web application that exports Onshape CAD assemblies to URDF format and preview
 ## Features
 
 - Export Onshape assemblies to URDF via API
+- **Parallel cache pre-warming** — fetches all part STLs concurrently (10 workers) before the main export, reducing download time 5–8×
+- **Resume-style retry** — on network timeout, retries up to 3 times reusing already-cached parts (no re-download)
+- Real-time export log with per-part download progress bar
 - Interactive 3D preview with joint controls and per-link mass panel
+- Parts without Onshape material assignment are flagged in the mass panel (shown as `0 g`) instead of crashing the export
 - Usage statistics (daily / weekly / monthly exports)
 - Auto-cleanup of export files older than 3 days
 - Cloudflare Tunnel support for public HTTPS access
@@ -62,6 +66,8 @@ ONSHAPE_SECRET_KEY=your_secret_key_here
 ```
 
 > Get your keys at: https://cad.onshape.com/user/developer/apiKeys
+
+> **Permission note:** If you use an API key from a different Onshape account than the document owner, that account must be shared with **"Can copy"** permission or higher. "Can view" alone is insufficient for the STL export API and will return a 403 error.
 
 ### 4. Build and start
 
@@ -189,7 +195,8 @@ Open your browser at `http://localhost:8000`.
 ```
 .
 ├── app.py                  # FastAPI web server
-├── export_urdf.py          # Onshape → URDF export logic
+├── export_urdf.py          # Onshape → URDF export logic (parallel pre-warm + retry)
+├── patch_library.py        # Build-time patch: handles parts with no material (zero mass)
 ├── static/
 │   └── index.html          # Single-page frontend (Three.js viewer)
 ├── requirements_web.txt    # Web + export dependencies
