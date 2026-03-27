@@ -1362,9 +1362,11 @@ async function startExport() {
 
 function streamLogs(jobId) {
   if (sseSource) sseSource.close();
+  let errCount = 0;
   sseSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
   sseSource.onmessage = e => {
+    errCount = 0;
     const data = JSON.parse(e.data);
 
     if (data.line !== undefined) {
@@ -1417,11 +1419,45 @@ function streamLogs(jobId) {
     }
   };
 
-  sseSource.onerror = () => {
-    sseSource.close();
-    log('Log stream disconnected', 'err');
-    showStatus('error', 'Connection Lost', 'Log stream disconnected — export may still be running');
-    resetExportBtn();
+  sseSource.onerror = async () => {
+    errCount++;
+    if (errCount > 8) {
+      sseSource.close();
+      log('Log stream disconnected after multiple retries', 'err');
+      showStatus('error', 'Connection Lost', 'Export may still be running — refresh to check');
+      resetExportBtn();
+      return;
+    }
+    // Check if job already finished before giving up
+    try {
+      const r = await fetch(`/api/jobs/${jobId}`);
+      if (r.ok) {
+        const job = await r.json();
+        if (job.status === 'success' || job.status === 'failed') {
+          sseSource.close();
+          if (job.status === 'success') {
+            setProgress(100, 'Export complete');
+            setStatusBadge('success', 'Success');
+            document.getElementById('btn-dl').style.display = 'block';
+            showStatus('running', 'Loading 3D model…', 'Fetching meshes');
+            loadRobot(jobId).then(() => {
+              showStatus('success', 'URDF Ready', 'Model loaded');
+              document.getElementById('progress-wrap').style.display = 'none';
+            }).catch(() => {
+              showStatus('success', 'URDF Ready', 'Download available — 3D viewer failed to load');
+              document.getElementById('progress-wrap').style.display = 'none';
+            });
+          } else {
+            showStatus('error', 'Export Failed', 'Check export log for details');
+          }
+          resetExportBtn();
+          refreshStats();
+          return;
+        }
+      }
+    } catch (_) {}
+    // Job still running — let EventSource auto-reconnect silently
+    log(`Stream interrupted, reconnecting… (${errCount})`, 'warn');
   };
 }
 

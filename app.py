@@ -224,12 +224,20 @@ async def stream_logs(job_id: str, request: Request):
     async def generator():
         job = JOBS[job_id]
         sent = start_index
+        idle_ticks = 0   # counts 0.3 s ticks with no new logs
         while True:
             logs = job["logs"]
-            while sent < len(logs):
-                data = json.dumps({"line": logs[sent]})
-                yield f"id: {sent}\ndata: {data}\n\n"
-                sent += 1
+            if sent < len(logs):
+                while sent < len(logs):
+                    data = json.dumps({"line": logs[sent]})
+                    yield f"id: {sent}\ndata: {data}\n\n"
+                    sent += 1
+                idle_ticks = 0
+            else:
+                idle_ticks += 1
+                # Send SSE comment keepalive every ~30 s to prevent Cloudflare timeout
+                if idle_ticks % 100 == 0:
+                    yield ": keepalive\n\n"
 
             if job["status"] in ("success", "failed"):
                 yield f"data: {json.dumps({'done': True, 'status': job['status']})}\n\n"
