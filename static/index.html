@@ -179,8 +179,9 @@
       max-height: 240px;
     }
     .joints-panel.visible { display: block; }
-    .joints-panel::-webkit-scrollbar { width: 4px; }
-    .joints-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .joints-panel::-webkit-scrollbar { width: 6px; }
+    .joints-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 3px; }
+    .joints-panel::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.45); }
     .panel-title {
       font-size: 0.7rem;
       font-weight: 700;
@@ -243,15 +244,17 @@
       backdrop-filter: blur(6px);
       display: none;
       flex-shrink: 0;
+      pointer-events: auto;
     }
     .mass-entries-scroll {
-      max-height: 152px;
+      max-height: 216px;   /* ~8 rows at 27px each */
       overflow-y: auto;
       overflow-x: hidden;
       margin-bottom: 2px;
     }
-    .mass-entries-scroll::-webkit-scrollbar { width: 4px; }
-    .mass-entries-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .mass-entries-scroll::-webkit-scrollbar { width: 6px; }
+    .mass-entries-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 3px; }
+    .mass-entries-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.45); }
     .mass-panel-title {
       font-size: 0.6rem;
       font-weight: 700;
