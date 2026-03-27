@@ -447,9 +447,9 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
     config_data['assemblyName'] = assembly_name
     if 'outputFormat' not in config_data:
         config_data['outputFormat'] = 'urdf'
-    # Prevent crash when parts have no material/mass assigned in Onshape
-    if 'noDynamics' not in config_data:
-        config_data['noDynamics'] = True
+    # noDynamics: only force-disable if user hasn't specified it.
+    # We default to False so mass data is written to the URDF (enables mass panel).
+    # If parts crash due to missing mass, the retry logic below auto-enables it.
     # Cache API responses so retries reuse already-fetched data (resume-style)
     if 'cache' not in config_data:
         config_data['cache'] = True
@@ -543,6 +543,15 @@ def export_urdf_cli(onshape_url, assembly_name, output_dir='output', config_file
             last_exc = e
             combined = '\n'.join(captured_out)
             is_timeout = any(sig in combined for sig in _TIMEOUT_SIGNALS)
+            is_mass_error = any(sig in combined for sig in ("KeyError: 'mass'", 'KeyError: "mass"', 'has no mass'))
+
+            # Auto-retry with noDynamics if some parts lack mass data
+            if is_mass_error and not config_data.get('noDynamics') and attempt < MAX_RETRIES - 1:
+                print(f"\n⚠ Some parts have no mass — retrying with noDynamics enabled (mass panel will be hidden)…", flush=True)
+                config_data['noDynamics'] = True
+                with open(output_config_file, 'w') as f:
+                    json.dump(config_data, f, indent=2)
+                continue
 
             if is_timeout and attempt < MAX_RETRIES - 1:
                 delay = RETRY_DELAYS[attempt]
