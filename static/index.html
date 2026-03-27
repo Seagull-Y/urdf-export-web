@@ -1119,13 +1119,20 @@ function hashColor(name) {
   return new THREE.Color().setHSL(((h & 0xff) / 255) * 0.35 + 0.55, 0.55, 0.52);
 }
 
-// Extract link name → mass (grams) from URDF XML
+// Extract link name → mass (grams) from URDF XML.
+// Links with a <visual> mesh but no <inertial> are included with value null
+// so the mass panel can flag them as "no mass data".
 function extractLinkMasses(urdfText) {
   const doc = new DOMParser().parseFromString(urdfText, 'text/xml');
   const map = {};
   for (const link of doc.querySelectorAll('link')) {
+    const name = link.getAttribute('name');
     const massEl = link.querySelector('inertial > mass');
-    if (massEl) map[link.getAttribute('name')] = parseFloat(massEl.getAttribute('value')) * 1000;
+    if (massEl) {
+      map[name] = parseFloat(massEl.getAttribute('value')) * 1000;
+    } else if (link.querySelector('visual')) {
+      map[name] = null; // has geometry but no mass data
+    }
   }
   return map;
 }
@@ -1245,18 +1252,20 @@ const ANNOT_PALETTE = [
 function addMassAnnotations(robot, linkMasses) {
   const panel = document.getElementById('mass-panel');
 
-  // Collect valid links (mass ≥ 0.5 g, link exists in robot)
-  const valid = Object.entries(linkMasses)
-    .filter(([n, m]) => m >= 0.5 && robot.links?.[n])
-    .sort(([a], [b]) => a.localeCompare(b));
-
-  if (!valid.length) { panel.style.display = 'none'; return; }
-
-  const totalG = Object.values(linkMasses).reduce((s, m) => s + m, 0);
   const fmtG = g => g >= 1000 ? `${(g / 1000).toFixed(2)} kg` : `${Math.round(g)} g`;
 
+  // Split into links with mass data vs links with visual but no mass
+  const withMass = Object.entries(linkMasses)
+    .filter(([n, m]) => m !== null && m >= 0.5 && robot.links?.[n])
+    .sort(([a], [b]) => a.localeCompare(b));
+  const noMass = Object.entries(linkMasses)
+    .filter(([n, m]) => m === null && robot.links?.[n])
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  if (!withMass.length && !noMass.length) { panel.style.display = 'none'; return; }
+
   let entries = '';
-  valid.forEach(([linkName, massG], i) => {
+  withMass.forEach(([linkName, massG], i) => {
     const hex   = ANNOT_PALETTE[i % ANNOT_PALETTE.length];
     const label = linkName.replace(/_/g, ' ');
     entries +=
@@ -1266,6 +1275,17 @@ function addMassAnnotations(robot, linkMasses) {
         `<span class="mass-entry-val" style="color:${hex}">${fmtG(massG)}</span>` +
       `</div>`;
   });
+  noMass.forEach(([linkName]) => {
+    const label = linkName.replace(/_/g, ' ');
+    entries +=
+      `<div class="mass-entry">` +
+        `<span class="mass-entry-dot" style="background:#ff453a"></span>` +
+        `<span class="mass-entry-name" title="${label}" style="color:#ff453a">${label}</span>` +
+        `<span class="mass-entry-val" style="color:#ff453a">—</span>` +
+      `</div>`;
+  });
+
+  const totalG = withMass.reduce((s, [, m]) => s + m, 0);
   let html = '<div class="mass-panel-title">Link Mass</div>' +
     `<div class="mass-entries-scroll">${entries}</div>`;
   if (totalG > 0) {
