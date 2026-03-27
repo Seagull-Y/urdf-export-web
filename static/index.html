@@ -1406,12 +1406,10 @@ function streamLogs(jobId) {
     if (data.line !== undefined) {
       log(data.line);
       advanceProgress(data.line);
-      // Collect parts with no mass
+      // Collect parts with no mass + update running status detail
       const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '');
       const m = clean.match(/WARNING: part (.+?) has no mass/);
       if (m) noMassParts.add(m[1].trim());
-      // Update running status detail with current task
-      const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '').trim();
       if (clean && !checkForErrors(data.line)) {
         // Only update detail if no error was just shown
         const card = document.getElementById('status-card');
