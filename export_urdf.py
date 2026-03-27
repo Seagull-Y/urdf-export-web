@@ -356,27 +356,39 @@ def _prewarm_cache(output_config_file, document_id, assembly_name, access_key, s
     lock = threading.Lock()
 
     def warm_part(inst):
-        wmvid = inst.get("documentMicroversion") or inst.get("documentVersion")
-        wmv   = "m" if "documentMicroversion" in inst else "v"
-        did   = inst["documentId"]
-        eid   = inst["elementId"]
-        partid = inst.get("partId", "")
+        # Key insight: kwargs dict ORDER must match instance_request_params() exactly,
+        # because pickle.dumps(dict) preserves insertion order, and the cache key is
+        # sha1(pickle({args, kwargs})). Mismatched order → different hash → cache miss.
+        # instance_request_params builds: wmvid, wmv, did, eid, linked_document_id,
+        # configuration — then partid is appended last by the caller.
+        if "documentVersion" in inst:
+            wmvid = inst["documentVersion"]
+            wmv   = "v"
+        else:
+            wmvid = inst["documentMicroversion"]
+            wmv   = "m"
+        did           = inst["documentId"]
+        eid           = inst["elementId"]
+        partid        = inst.get("partId", "")
         configuration = inst["configuration"]
         client = get_client()
         ok = True
         try:
+            # Exact same kwarg order as robot_builder.py:
+            # **instance_request_params() → {wmvid, wmv, did, eid, linked_document_id, configuration}
+            # + partid=...
             client.part_studio_stl_m(
-                did=did, wmvid=wmvid, eid=eid, partid=partid,
-                wmv=wmv, configuration=configuration,
-                linked_document_id=document_id,
+                wmvid=wmvid, wmv=wmv, did=did, eid=eid,
+                linked_document_id=document_id, configuration=configuration,
+                partid=partid,
             )
         except Exception:
             ok = False
         try:
             client.part_get_metadata(
-                did=did, wmvid=wmvid, eid=eid, partid=partid,
-                wmv=wmv, configuration=configuration,
-                linked_document_id=document_id,
+                wmvid=wmvid, wmv=wmv, did=did, eid=eid,
+                linked_document_id=document_id, configuration=configuration,
+                partid=partid,
             )
         except Exception:
             ok = False
