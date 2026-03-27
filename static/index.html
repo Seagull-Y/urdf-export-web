@@ -1377,6 +1377,36 @@ function updatePartsProgress(n, total, partName) {
     partName.length > 55 ? partName.slice(0, 53) + '…' : partName;
 }
 
+function updatePrewarmProgress(msg) {
+  // Show / update a small pre-warm indicator above the main progress bar
+  let bar = document.getElementById('prewarm-progress');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'prewarm-progress';
+    bar.className = 'parts-progress';
+    const wrap = document.getElementById('progress-wrap');
+    if (wrap) wrap.insertBefore(bar, wrap.firstChild);
+  }
+  const mCnt = msg.match(/(\d+)\/(\d+)/);
+  let fillHtml, label;
+  if (mCnt) {
+    const n = parseInt(mCnt[1]), tot = parseInt(mCnt[2]);
+    const pct = Math.round((n / tot) * 100);
+    label = `Parallel cache pre-warm: ${n} / ${tot}`;
+    fillHtml = `<div class="parts-fill" style="width:${pct}%"></div>`;
+    if (n >= tot) {
+      // Done — remove after brief delay
+      setTimeout(() => document.getElementById('prewarm-progress')?.remove(), 1500);
+    }
+  } else {
+    label = `Cache pre-warm: ${msg}`;
+    fillHtml = `<div class="parts-fill parts-fill-indeterminate"></div>`;
+  }
+  bar.innerHTML =
+    `<div class="parts-label">⚡ ${label}</div>` +
+    `<div class="parts-track">${fillHtml}</div>`;
+}
+
 // ──────────────────────────────────────────────────────────────
 // Status card helpers
 // ──────────────────────────────────────────────────────────────
@@ -1471,6 +1501,23 @@ function streamLogs(jobId) {
 
     if (data.line !== undefined) {
       const clean = data.line.replace(/\x1b\[[0-9;]*m/g, '');
+
+      // ── Parallel pre-warm progress: "[PREWARM] N/TOTAL cached …" ──
+      const mWarm = clean.match(/^\[PREWARM\]\s+(.*)/);
+      if (mWarm) {
+        const msg = mWarm[1].trim();
+        // Show a compact pre-warm counter but keep it out of the main log noise
+        updatePrewarmProgress(msg);
+        log(`  ⚡ ${msg}`, 'info');
+        // Advance main bar to indicate active pre-warming (17%–24%)
+        const mCnt = msg.match(/(\d+)\/(\d+)/);
+        if (mCnt) {
+          const n = parseInt(mCnt[1]), tot = parseInt(mCnt[2]);
+          const mapped = 17 + Math.round((n / tot) * 7);
+          if (mapped > currentProgress) setProgress(mapped, `Pre-warming cache: ${n}/${tot}`);
+        }
+        return;
+      }
 
       // ── Part download progress: "[PARTS] N/TOTAL — partname" ──
       const mParts = clean.match(/^\[PARTS\]\s+(\d+)\/(\d+|\?)\s+—\s+(.+)/);
