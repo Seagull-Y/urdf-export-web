@@ -1625,11 +1625,20 @@ function streamLogs(jobId) {
 
       log(data.line);
       advanceProgress(data.line);
+
+      // ── Mate / DOF summary ──────────────────────────────────────
+      const mDOF = clean.match(/Found total\s+(\d+)\s+degrees? of freedom/i);
+      if (mDOF) {
+        const n = parseInt(mDOF[1]);
+        log(`  ⚙ ${n} mate${n !== 1 ? 's' : ''} detected (${n} DOF)`, 'info');
+        setStatusPhase(`⚙ ${n} DOF detected — building URDF…`);
+      }
+
       // Collect parts with no mass
       const m = clean.match(/WARNING: part (.+?) has no mass/);
       if (m) noMassParts.add(m[1].trim());
       // Update status card detail: prefer a friendly phase label, fall back to raw line
-      if (clean && !checkForErrors(data.line)) {
+      if (clean && !checkForErrors(data.line) && !mDOF) {
         const card = document.getElementById('status-card');
         if (card.classList.contains('s-running')) {
           const phase = matchPhaseLabel(clean);
